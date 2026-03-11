@@ -58,7 +58,18 @@ func (e extractor) Version() string {
 	return "unknown"
 }
 
-func (e extractor) extractMetadata(filePath string) (*metadata.Info, error) {
+func (e extractor) extractMetadata(filePath string) (result *metadata.Info, err error) {
+	// Recover from panics in WASM tag-reading calls (e.g. AllTags, Properties on malformed files).
+	// debug.SetPanicOnFault converts memory faults from the WASM runtime into recoverable panics.
+	debug.SetPanicOnFault(true)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Warn("gotaglib: WASM panic reading tags, skipping file", "filePath", filePath, "panic", r)
+			err = fmt.Errorf("WASM panic reading tags: %v", r)
+			result = nil
+		}
+	}()
+
 	f, close, err := e.openFile(filePath)
 	if err != nil {
 		log.Warn("gotaglib: Error reading metadata from file. Skipping", "filePath", filePath, err)
